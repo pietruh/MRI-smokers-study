@@ -29,18 +29,20 @@ def preprocess_statistics(all_stats, data, remove_strange=0):
     strange = all_stats.loc[(all_stats['group'] == 'non') | all_stats['YearsOfSmoking'] == 0]
     strange_id = strange.Variables.str.extract('(\d+)')
     strange_id = strange_id[0].tolist()
+    #all_stats_feats = all_stats[all_stats.columns[-20:]]
+    #data = pd.concat([all_stats_feats, data_in])
     # data= df.iloc[:,[0,40]]
     # data = df[list(df.columns[0:1]) + list(df.columns[40:])]
     drop_id = [130, 361, 379, 382, 455, 508, 517, 566, 643, 801, 834, 854, 927, 513] + remove_strange * strange_id
-    print(f'Dropping smokers with ids {drop_id}')
-    data = data[~data.id.isin(drop_id)]
+    #print(f'Dropping smokers with ids {drop_id}')
+    #data = data[~data.id.isin(drop_id)]
 
     data = data.replace({'grupa': {'smoker': 1, 'non-smoker': 0}})
     # Dropping meaningless columns with NaNs
     data = data.drop(['recon_all2', 'recon_all222', 'recon_all2222', 'recon_all22222', 'recon_all3'], axis=1)
-    data = data.drop(['id', 'recon_all', 'r_insula_MeanCurv', 'r_temporalpole_MeanCurv', 'r_temporalpole_GrayVol',
+    data = data.drop(['recon_all', 'r_insula_MeanCurv', 'r_temporalpole_MeanCurv', 'r_temporalpole_GrayVol',
                       'r_insula_GrayVol', 'r_insula_ThickAvg', 'r_temporalpole_ThickAvg'], axis=1)
-    # filtering values based on regexes
+    # filtering values based on drop_idregexes
     data_mm3 = data.filter(regex='mm3', axis=1)
     data_vol = data.filter(regex='_GrayVol', axis=1)
     data_thick = data.filter(regex='_ThickAvg', axis=1)
@@ -53,7 +55,8 @@ def preprocess_statistics(all_stats, data, remove_strange=0):
     # Concatenate data and return
     data = pd.concat([grupa, sex, data_mm3, data_vol, data_thick, data_left_right_overall, data_curv], axis=1,
                      join_axes=[data_mm3.index])
-    return data
+    data_basic = pd.concat([grupa, sex, data_mm3], axis=1, join_axes=[data_mm3.index])
+    return data#data
 
 
 def boxplot_features(data):
@@ -101,14 +104,14 @@ def normalize_data_sex(data):
 def get_t_test_results(data_shuffled0, smoker, nsmoker):
     t_stats = []
     p_value = []
-
-    for i in list(data_shuffled0)[3:]:      # FIXME: it was 250 on the right bound
+    starting_idx = 3
+    for i in list(data_shuffled0)[starting_idx:]:      # FIXME: it was 250 on the right bound
         test = ttest_ind(smoker[i], nsmoker[i])
         t_stats.append(test[0])
         p_value.append(test[1])
 
     # data frame with variables and scores, sorted
-    t_test = pd.DataFrame({'variable': list(data_shuffled0)[3:], 't_statistic': t_stats, 'p_value': p_value})
+    t_test = pd.DataFrame({'variable': list(data_shuffled0)[starting_idx:], 't_statistic': t_stats, 'p_value': p_value})
     t_test = t_test.sort_values(by=['p_value'])
     return t_test
 
@@ -122,27 +125,31 @@ def feature_selector_simple(X0, y0, test_method, classifier_method, test_size=0.
 
     scores_big_array = np.zeros((num_iters, len_plot))
     for n_iters in range(0, num_iters):
-        if X_val is None:
-            X_train, X_test, y_train, y_test = train_test_split(X0, y0, test_size=test_size)#, random_state=1)
-        else:
-            X_train = X0
-            X_test = X_val
-            y_train = y0
-            y_test = y_val
+        # if X_val is None:
+        #     X_train, X_test, y_train, y_test = train_test_split(X0, y0, test_size=test_size)#, random_state=1)
+        # else:
+        X_train = X0
+        X_test = X_val
+        y_train = y0
+        y_test = y_val
 
-
+        print(n_iters)#, i)
         for i in range(1, len_plot):
-            print(n_iters, i)
             classifier_method.fit(X_train[test_method[0:i]['variable']], y_train)
             score = classifier_method.score(X_test[test_method[0:i]['variable']], y_test)
             scores_big_array[n_iters, i] = score
+
+            predict_test = classifier_method.predict(X_test[test_method[0:i]['variable']])
+            predict_train = classifier_method.predict(X_train[test_method[0:i]['variable']])
+            score_train = classifier_method.score(X_train[test_method[0:i]['variable']], y_train)
     #scores_big_array_np = np.array(scores_big_array)
 
     # plot mean values
     plt.plot(range(1, len_plot), scores_big_array.mean(axis=0)[1:], color="black")
-    plt.title("Accuracy of LogReg with t-test feature selection")
+    plt.title("Accuracy of classifier with feature selection")
     plt.xlabel("Number Of variables")
     plt.ylabel("Accuracy Score")
+    #plt.show()
     print("Mean accuracy values for different number of features ={}".format(scores_big_array.mean(axis=0)))
     return scores_big_array
 
@@ -340,47 +347,36 @@ def explore_selection_methods(X, X_val, y, y_val):
     return
 
 
-def run_classification(data, classifier, feature_selector_list, k=10, val_ratio=0.2, nr_of_feat=20):
+def run_classification(X, X_val, y, y_val, classifier, feature_selector_list, k=5, max_feature_number=30):
     # apply feature selection criteria with specified number of features
-    data_reduced = data[['grupa'] + feature_selector_list[1:nr_of_feat]]
-
-    # shuffle data
-    data_shuffled = shuffle(data_reduced, random_state=7)
-    data_shuffled = data_shuffled.reset_index(drop=True)
-    y = data_shuffled.grupa
-    X = data_shuffled.drop(['grupa'], axis=1)
-
-    # split data into train+test and validation sets
-    X, X_val, y, y_val = train_test_split(X, y, test_size=val_ratio, random_state=1)
-    X = np.array(X)
-    y = np.array(y)
-
     # grid search for best model meta parameters for the classifier
     # FIXME: For fast run commented out grid search parameter packs
-    param_rf = {'bootstrap': [True], 'n_estimators': [100]}#{'bootstrap': [True, False], 'n_estimators': [50, 100, 150]}
-    param_svm = {'kernel': ['rbf'], 'C': [10]}  #{'kernel': ['rbf'], 'C': [1, 10, 100]}
-    param_lr = {'C': [10]}  #{'C': [1, 10, 100]}
-    #param_xgb = {'xgb.XGBClassifier': [5, 10, 25], 'n_estimators': [50, 100, 150], 'learning_rate': [0.05, 0.1]}
+    param_rf = {'n_estimators': [50, 100, 150, 200, 250, 500, 1000], 'max_depth': [3,4,5, 6,7,8, 9,10,11, 12,15], 'criterion': ['gini', 'entropy'],
+                'class_weight': ['balanced']}
+    param_svm = {'kernel': ['rbf', 'poly', 'linear', 'sigmoid'], 'cache_size': [1000], 'C': [0.5, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.5, 2.0, 5, 10],
+                 'gamma': [0.03, 0.01, 0.005, 0.05, 0.01, 'auto']}
+    param_lr = {'C': [0.4, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.8, 3, 6, 10, 15], 'fit_intercept': [True, False]}
 
 
     if isinstance(classifier, RandomForestClassifier):
-        clf = GridSearchCV(classifier, param_rf, cv=5)
+        clf = GridSearchCV(classifier, param_rf, cv=k)
     if isinstance(classifier, svm.SVC):
-        clf = GridSearchCV(classifier, param_svm, cv=5)
+        clf = GridSearchCV(classifier, param_svm, cv=k)
     if isinstance(classifier, LogisticRegression):
-        clf = GridSearchCV(classifier, param_lr, cv=5)
+        clf = GridSearchCV(classifier, param_lr, cv=k)
     # if classifier == xgbc:
     #    clf = GridSearchCV(classifier, param_xgb, cv=5)
-    clf_grid = clf.fit(X, y)
+    clf_grid = clf.fit(X[feature_selector_list[0:max_feature_number]['variable']], y)
+    val_acc = clf_grid.score(X_val[feature_selector_list[0:max_feature_number]['variable']], y_val)
 
+    print(clf_grid.best_params_)
     # run model classification
-    avg_acc, avg_roc, average_precision = run_k_fold(clf_grid, X, y, k)
+    #avg_acc, avg_roc, average_precision = run_k_fold(clf_grid, X, y, k)
 
     # calculate validation accuracy (accuracy of trained model on the data initially left out)
-    val_acc = clf_grid.score(X_val, y_val)
-
+    #val_acc = clf_grid.score(X_val, y_val)
     # return average accuracy on test sets, average auc score on test sets, and validation score
-    return val_acc, average_precision, clf  # avg_roc, val_acc
+    return val_acc, clf_grid  # avg_roc, val_acc
     # print (avg_acc, avg_roc, val_acc)
 
 

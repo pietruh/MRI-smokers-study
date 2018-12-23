@@ -15,7 +15,8 @@ from sklearn.feature_selection import mutual_info_classif
 from sklearn.decomposition import PCA, KernelPCA
 
 from utils import preprocess_statistics, boxplot_features, normalize_volume_as_proportion, normalize_data_sex, \
-    get_t_test_results, feature_selector_simple, run_loocv, Kernel_SVM, explore_selection_methods, build_results_comparison
+    get_t_test_results, feature_selector_simple, run_loocv, Kernel_SVM, explore_selection_methods, build_results_comparison,\
+    run_classification
 
 from sklearn import preprocessing
 from sklearn.linear_model import LogisticRegression
@@ -54,16 +55,24 @@ data_norm = normalize_data_sex(data)
 data_shuffled0 = shuffle(data_norm, random_state=7)
 data_shuffled0 = data_shuffled0.reset_index(drop=True)
 
-y0 = data_shuffled0.grupa
+y0 = data_shuffled0.grupa.astype('int')
 X0 = data_shuffled0.drop(['grupa'], axis=1)
 
 smoker = data_shuffled0[data_shuffled0['grupa']== 1]
 nsmoker = data_shuffled0[data_shuffled0['grupa']== 0]
+X, X_val, y, y_val = train_test_split(X0, y0, test_size=0.2, random_state=1)
 
 
 # Define models (these could be models that have interpretable features)
 # Returns vector of acc results with increasing number of features
 logreg = LogisticRegression(solver='lbfgs')
+logreg = LogisticRegression(solver='newton-cg', C=0.7, dual=False)
+svm_params = {'C': 0.5,
+              'tol': 1e-9,
+              'cache_size': 1000,
+              'kernel': 'rbf',
+              'gamma': 'auto',
+              'class_weight': 'balanced'}
 # Build a forest and compute the feature importances
 forest = RandomForestClassifier(n_estimators=100,
                               random_state=0)
@@ -72,45 +81,38 @@ forest = RandomForestClassifier(n_estimators=100,
 t_test = get_t_test_results(data_shuffled0, smoker, nsmoker)
 
 feature_scores = mutual_info_classif(X0, y0)
-inf_gain = pd.DataFrame({'variable': list(X0), 'score': -np.sort(-feature_scores)})
+inf_gain = pd.DataFrame({'variable': list(X0), 'score': -feature_scores}).sort_values('score')
 
 model = forest.fit(X0, y0)
 importances = model.feature_importances_
-rf_imp = pd.DataFrame({'variable': list(X0), 'score': -np.sort(-importances)})
+rf_imp = pd.DataFrame({'variable': list(X0), 'score': -importances}).sort_values('score')
 
 # Get accuracy of feature selection for logreg and different selection methods
 feature_selectors_list = [t_test, inf_gain, rf_imp]
-for i, c in enumerate(feature_selectors_list):
-    scores_big_array_np = feature_selector_simple(X0, y0, feature_selectors_list[i], logreg, test_size=0.2, num_iters=1, len_plot=10)
+rfc_ = RandomForestClassifier(n_estimators=100, random_state=0)
+# svm_ = clf = svm.SVC(C=100.0, tol=1e-2, cache_size=1000, kernel='rbf', gamma=0.03,
+#               class_weight='balanced')
+svm_ = svm.SVC(C=400.0, tol=1e-1, cache_size=1000, kernel='rbf', gamma=0.05,
+              class_weight='balanced')
+svm_ = svm.SVC(C=100.0, tol=1e-1, cache_size=1000, kernel='rbf', gamma=0.03,
+              class_weight='sigmoid')
+svm_ = svm.SVC(**svm_params)
+#for i, c in enumerate(feature_selectors_list):
+#    scores_big_array_np = feature_selector_simple(X, y, feature_selectors_list[i], svm_, test_size=0.2, num_iters=5,
+#    len_plot=300, X_val=X_val, y_val=y_val)
 
 
 # TODO: continue refactoring from below
 # call_PCA_processing(data_shuffled0, X0) # FIXME: Use this if in need
 
 
-data_shuffled = shuffle(data_norm)
-data_shuffled = data_shuffled.reset_index(drop=True)
-y = data_shuffled.grupa
-X = data_shuffled.drop(['grupa'], axis=1)
-
-min_max_scaler = preprocessing.MinMaxScaler()
-X = pd.DataFrame(min_max_scaler.fit_transform(X), columns=X.columns)
-
-X, X_val, y, y_val = train_test_split(X, y, test_size=0.2, random_state=1)
-
-X_np = np.array(X)
-y_np = np.array(y)
-
 #explore_selection_methods(X, X_val, y, y_val)  # FIXME: svm is crashing here
 
 
 # Function for running the whole classification process, after applying feature selection ,
 # and with varying validation set ratios
-last_to_feature_list = 15
-inf_gain_list = inf_gain['variable'][1:last_to_feature_list].tolist()
-t_test_list = t_test['variable'][1:last_to_feature_list].tolist()
-rf_imp_list = rf_imp['variable'][1:last_to_feature_list].tolist()
-#fs_list = [rf_imp_list, t_test_list, inf_gain_list]
+
+
 fs_list = [rf_imp, t_test, inf_gain]
 
 #   arr_acc, arr_prec, arr_clf = build_results_comparison(fs_list, data_norm)  # FIXME: For now there is no grid search
@@ -120,39 +122,53 @@ fs_list = [rf_imp, t_test, inf_gain]
 # Running 3x3 classification, with different feature selectors and different classifiers
 ## TODO: Remember to pass models after grid search (the ones with the parameters that gives the best results )
 #
+# Only grid search here:
+clasf_list = [RandomForestClassifier(), LogisticRegression(), svm.SVC()]
+best_clfs = []
+text_file = open("Output_log.txt", "w")
+for i, c in enumerate(clasf_list):
+    val_acc, clf = run_classification(X, X_val, y, y_val, c, feature_selectors_list[2], k=5, max_feature_number=30)
+    print(val_acc, clf.best_params_)
+    print(f"val_acc: {val_acc}\n clf.best_params_: {clf.best_params_}\n string: {c.__str__()} \n\n", file=text_file)
 
-random_forest = RandomForestClassifier(n_estimators=100, random_state=0)
-svmc = svm.SVC()
-lr = LogisticRegression(solver='lbfgs')
+    best_clfs.append(clf)
+text_file.close()
+
+
+random_forest = RandomForestClassifier(**best_clfs[0].best_params_)
+lr = LogisticRegression(**best_clfs[1].best_params_)
+svmc = svm.SVC(**best_clfs[2].best_params_)
 clasf = [random_forest, svmc, lr]
-clasf_names =['random_forest', 'svmc', 'lr']
-fs_names =  ['rf_imp', 't_test', 'inf_gain']
+clasf_names = ['random_forest', 'svmc', 'lr']
+fs_names = ['rf_imp', 't_test', 'inf_gain']
 #arr_clf_flatten = arr_clf.flatten()
 #classifiers = [arr_clf_flatten[i].best_estimators_ for i in arr_clf_flatten]
 clf_list = []
 description = []
-num_iters = 100
+num_iters = 200
 fig = plt.figure(figsize=(10, 8))
 plt.xlabel('#features', fontsize=15)
 plt.ylabel('Accuracy', fontsize=15)
 plt.title('Plot of different models and feature selectors', fontsize=20)
 linestyles = ['-', ':', '--', '-.']     # linestyle for fs
-model_colors_dict =['k', 'r', 'b'] # color for classifiers#{'random_forest': 'k', 'svmc': 'r', 'lr': 'b'}
-len_plot = 30
+model_colors_dict =['k', 'r', 'g']
+len_plot = 100
+plot_starting_index = 1
+print('big loop started!')
 for j, f in enumerate(fs_list):
     for i, c in enumerate(clasf):
-        #print("interesting part is here", i, c, j, f)
-        #arr2[i,j,k] = run_classification(data_norm, c, f, val_ratio = v)
 
-        # acc_with_features[i,j] = feature_selector(X0, y0, f, c, test_size=0.2, num_iters=1000)
         tmp_res = feature_selector_simple(X, y, f, c, test_size=0.2, num_iters=num_iters, X_val=X_val, y_val=y_val, len_plot = len_plot)
         clf_list.append(tmp_res)
         description.append({'fs': f, 'c': c})
         plt.plot(tmp_res.mean(axis=0), label=clasf_names[i] + ', ' + fs_names[j], color=model_colors_dict[i],
                  linestyle=linestyles[j])
 
+        print(clasf_names[i], fs_names[j], 'finished')
+plt.ylim(0.5, 0.8)
+plt.xlim(1, len_plot)
 legend = fig.legend(loc='upper right', shadow=True, fontsize='large')
-fig.savefig('img_comparison.png')
+fig.savefig('img_comparison_long.png')
 
 
 acc_with_features = np.asarray(clf_list).mean(axis=1)
@@ -161,34 +177,3 @@ np.save('clf_list.npy', clf_list)
 #big_arr_to_graph = np.array(acc_with_features)
 # now, let's get mean of the last iteration dimension
 
-
-#def feature_selector(X0, x_val, y0, y_val, test_method, classifier_method, test_size=0.2, num_iters=1000):
-#tmp_res = feature_selector(X, X_val, y, y_val, f, c, test_size=0.2, num_iters=10)
-#X0 = X
-#x_val=X_val
-#y0=y
-#test_method=fs_list[0]
-#classifier_method = classifiers[0]
-#num_iters=10
-#test_size=0.2
-#scores_big_array = []
-#n_iters = 0
-#i = 0
-##for n_iters in range(0, num_iters):
-#    #X_train, X_test, y_train, y_test = train_test_split(X0, y0, test_size=test_size)#, random_state=1)
-##
-##     scores = []
-##  #   for i in range(1, len(test_method)):
-##         classifier_method.fit(X0[test_method[0:i]['variable']], y)
-##         score = classifier_method.score(x_val[test_method[0:i]['variable']], y_val)
-##         scores.append(score)
-##     scores_big_array.append(scores)
-## scores_big_array_np = np.array(scores_big_array)
-##
-##
-##     classifier_method.fit(X0[test_method[0:i]['variable']], y)
-#
-#test_method[0:10]
-#
-#
-#

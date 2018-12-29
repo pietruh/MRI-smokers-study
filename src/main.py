@@ -16,7 +16,7 @@ from sklearn.decomposition import PCA, KernelPCA
 
 from utils import preprocess_statistics, boxplot_features, normalize_volume_as_proportion, normalize_data_sex, \
     get_t_test_results, feature_selector_simple, run_loocv, Kernel_SVM, explore_selection_methods, build_results_comparison,\
-    run_classification
+    run_classification, grid_search_with_feature_selectors, iterate_and_plot
 
 from sklearn import preprocessing
 from sklearn.linear_model import LogisticRegression
@@ -29,7 +29,7 @@ from sklearn.utils import shuffle
 import os
 
 
-#%matplotlib inline
+# %matplotlib inline
 df_path = '../data/fully_merged_data.xlsx'
 try:
     df = pd.read_excel(df_path)
@@ -45,8 +45,8 @@ except:
 data = preprocess_statistics(all_stats, df, remove_strange=0)
 
 # FIXME: Use this if in need
-#boxplot_features(data)
-#normalize_volume_as_proportion(data)
+# boxplot_features(data)
+# normalize_volume_as_proportion(data)
 
 
 # Normalizing volume as a proportion to total volume for each sex
@@ -106,7 +106,7 @@ svm_ = svm.SVC(**svm_params)
 # call_PCA_processing(data_shuffled0, X0) # FIXME: Use this if in need
 
 
-#explore_selection_methods(X, X_val, y, y_val)  # FIXME: svm is crashing here
+# explore_selection_methods(X, X_val, y, y_val)  # FIXME: svm is crashing here
 
 
 # Function for running the whole classification process, after applying feature selection ,
@@ -116,64 +116,15 @@ svm_ = svm.SVC(**svm_params)
 fs_list = [rf_imp, t_test, inf_gain]
 
 #   arr_acc, arr_prec, arr_clf = build_results_comparison(fs_list, data_norm)  # FIXME: For now there is no grid search
-#print(f"arr_acc = {arr_acc}")
-#print(f"arr_prec = {arr_prec}")
+# print(f"arr_acc = {arr_acc}")
+# print(f"arr_prec = {arr_prec}")
+
+# Look for the best parameters of a classifiers
+best_clfs = grid_search_with_feature_selectors(X, X_val, y, y_val, feature_selectors_list)
 
 # Running 3x3 classification, with different feature selectors and different classifiers
-## TODO: Remember to pass models after grid search (the ones with the parameters that gives the best results )
-#
-# Only grid search here:
-clasf_list = [RandomForestClassifier(), LogisticRegression(), svm.SVC()]
-best_clfs = []
-text_file = open("Output_log.txt", "w")
-for i, c in enumerate(clasf_list):
-    val_acc, clf = run_classification(X, X_val, y, y_val, c, feature_selectors_list[2], k=5, max_feature_number=30)
-    print(val_acc, clf.best_params_)
-    print(f"val_acc: {val_acc}\n clf.best_params_: {clf.best_params_}\n string: {c.__str__()} \n\n", file=text_file)
+# TODO: Remember to pass models after grid search (the ones with the parameters that gives the best results)
+iterate_and_plot(fs_list, best_clfs)
 
-    best_clfs.append(clf)
-text_file.close()
-
-
-random_forest = RandomForestClassifier(**best_clfs[0].best_params_)
-lr = LogisticRegression(**best_clfs[1].best_params_)
-svmc = svm.SVC(**best_clfs[2].best_params_)
-clasf = [random_forest, svmc, lr]
-clasf_names = ['random_forest', 'svmc', 'lr']
-fs_names = ['rf_imp', 't_test', 'inf_gain']
-#arr_clf_flatten = arr_clf.flatten()
-#classifiers = [arr_clf_flatten[i].best_estimators_ for i in arr_clf_flatten]
-clf_list = []
-description = []
-num_iters = 200
-fig = plt.figure(figsize=(10, 8))
-plt.xlabel('#features', fontsize=15)
-plt.ylabel('Accuracy', fontsize=15)
-plt.title('Plot of different models and feature selectors', fontsize=20)
-linestyles = ['-', ':', '--', '-.']     # linestyle for fs
-model_colors_dict =['k', 'r', 'g']
-len_plot = 100
-plot_starting_index = 1
-print('big loop started!')
-for j, f in enumerate(fs_list):
-    for i, c in enumerate(clasf):
-
-        tmp_res = feature_selector_simple(X, y, f, c, test_size=0.2, num_iters=num_iters, X_val=X_val, y_val=y_val, len_plot = len_plot)
-        clf_list.append(tmp_res)
-        description.append({'fs': f, 'c': c})
-        plt.plot(tmp_res.mean(axis=0), label=clasf_names[i] + ', ' + fs_names[j], color=model_colors_dict[i],
-                 linestyle=linestyles[j])
-
-        print(clasf_names[i], fs_names[j], 'finished')
-plt.ylim(0.5, 0.8)
-plt.xlim(1, len_plot)
-legend = fig.legend(loc='upper right', shadow=True, fontsize='large')
-fig.savefig('img_comparison_long.png')
-
-
-acc_with_features = np.asarray(clf_list).mean(axis=1)
-np.save('clf_list.npy', clf_list)
-# get final results to the array (should be 4d)
-#big_arr_to_graph = np.array(acc_with_features)
 # now, let's get mean of the last iteration dimension
 

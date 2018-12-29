@@ -414,4 +414,68 @@ def build_results_comparison(fs_list, data_norm):
     return arr_acc, arr_prec, arr_clf
 
 
+def grid_search_with_feature_selectors(X, X_val, y, y_val, feature_selectors_list):
+    """
+    Only grid search here
+    returns parameters of the best classifiers with respect to a given feature selector
+    """
+    clasf_list = [RandomForestClassifier(), LogisticRegression(), svm.SVC()]
+    best_clfs = []
+    text_file = open("Output_log.txt", "w")
+    for i, c in enumerate(clasf_list):
+        val_acc, clf = run_classification(X, X_val, y, y_val, c, feature_selectors_list[2], k=5, max_feature_number=30)
+        print(val_acc, clf.best_params_)
+        print(f"val_acc: {val_acc}\n clf.best_params_: {clf.best_params_}\n string: {c.__str__()} \n\n", file=text_file)
+
+        best_clfs.append(clf)
+    text_file.close()
+    return best_clfs
+
+
+def iterate_and_plot(fs_list, best_clfs):
+    """
+    Repeat experiments multiple times and plot graphs that show dependency of the result on the number of features
+    and classifier - feature selector pair
+    :param fs_list:
+    :param best_clfs:
+    :return:
+    """
+    random_forest = RandomForestClassifier(**best_clfs[0].best_params_)
+    lr = LogisticRegression(**best_clfs[1].best_params_)
+    svmc = svm.SVC(**best_clfs[2].best_params_)
+    clasf = [random_forest, svmc, lr]
+    clasf_names = ['random_forest', 'svmc', 'lr']
+    fs_names = ['rf_imp', 't_test', 'inf_gain']
+    # arr_clf_flatten = arr_clf.flatten()
+    # classifiers = [arr_clf_flatten[i].best_estimators_ for i in arr_clf_flatten]
+    clf_list = []
+    description = []
+    num_iters = 200
+    fig = plt.figure(figsize=(10, 8))
+    plt.xlabel('#features', fontsize=15)
+    plt.ylabel('Accuracy', fontsize=15)
+    plt.title('Plot of different models and feature selectors', fontsize=20)
+    linestyles = ['-', ':', '--', '-.']  # linestyle for fs
+    model_colors_dict = ['k', 'r', 'g']
+    len_plot = 100
+    plot_starting_index = 1
+    print('big loop started!')
+    for j, f in enumerate(fs_list):
+        for i, c in enumerate(clasf):
+            tmp_res = feature_selector_simple(X, y, f, c, test_size=0.2, num_iters=num_iters, X_val=X_val, y_val=y_val,
+                                              len_plot=len_plot)
+            clf_list.append(tmp_res)
+            description.append({'fs': f, 'c': c})
+            plt.plot(tmp_res.mean(axis=0), label=clasf_names[i] + ', ' + fs_names[j], color=model_colors_dict[i],
+                     linestyle=linestyles[j])
+
+            print(clasf_names[i], fs_names[j], 'finished')
+    plt.ylim(0.5, 0.8)
+    plt.xlim(1, len_plot)
+    legend = fig.legend(loc='upper right', shadow=True, fontsize='large')
+    fig.savefig('img_comparison_long.png')
+
+    acc_with_features = np.asarray(clf_list).mean(axis=1)
+    np.save('clf_list.npy', clf_list)
+
 

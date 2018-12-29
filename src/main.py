@@ -120,11 +120,15 @@ fs_list = [rf_imp, t_test, inf_gain]
 # print(f"arr_prec = {arr_prec}")
 
 # Look for the best parameters of a classifiers
-best_clfs = grid_search_with_feature_selectors(X, X_val, y, y_val, feature_selectors_list)
+best_clfs_rf = grid_search_with_feature_selectors(X, X_val, y, y_val, fs_list[0], name="fs_random_forest")
+best_clfs_ttest = grid_search_with_feature_selectors(X, X_val, y, y_val, fs_list[1], name="fs_ttest")
+best_clfs_inf = grid_search_with_feature_selectors(X, X_val, y, y_val, fs_list[2], name="fs_inf_gain")
 
 # Running 3x3 classification, with different feature selectors and different classifiers
 # TODO: Remember to pass models after grid search (the ones with the parameters that gives the best results)
-iterate_and_plot(fs_list, best_clfs)
+iterate_and_plot(X, X_val, y, y_val, fs_list[0], best_clfs_rf, name="fs_random_forest")
+iterate_and_plot(X, X_val, y, y_val, fs_list[1], best_clfs_ttest, name="fs_ttest")
+iterate_and_plot(X, X_val, y, y_val, fs_list[2], best_clfs_inf, name="fs_inf_gain")
 
 # now, let's get mean of the last iteration dimension
 

@@ -17,6 +17,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn import svm
 from sklearn.ensemble import RandomForestClassifier
 
+
 def preprocess_statistics(all_stats, data, remove_strange=0):
     """ Here is a simple preprocessing to remove strange data, drop meaningles columns and filtering different
     types of metrics variables
@@ -29,13 +30,13 @@ def preprocess_statistics(all_stats, data, remove_strange=0):
     strange = all_stats.loc[(all_stats['group'] == 'non') | all_stats['YearsOfSmoking'] == 0]
     strange_id = strange.Variables.str.extract('(\d+)')
     strange_id = strange_id[0].tolist()
-    #all_stats_feats = all_stats[all_stats.columns[-20:]]
-    #data = pd.concat([all_stats_feats, data_in])
+    # all_stats_feats = all_stats[all_stats.columns[-20:]]
+    # data = pd.concat([all_stats_feats, data_in])
     # data= df.iloc[:,[0,40]]
     # data = df[list(df.columns[0:1]) + list(df.columns[40:])]
     drop_id = [130, 361, 379, 382, 455, 508, 517, 566, 643, 801, 834, 854, 927, 513] + remove_strange * strange_id
-    #print(f'Dropping smokers with ids {drop_id}')
-    #data = data[~data.id.isin(drop_id)]
+    # print(f'Dropping smokers with ids {drop_id}')
+    # data = data[~data.id.isin(drop_id)]
 
     data = data.replace({'grupa': {'smoker': 1, 'non-smoker': 0}})
     # Dropping meaningless columns with NaNs
@@ -56,7 +57,7 @@ def preprocess_statistics(all_stats, data, remove_strange=0):
     data = pd.concat([grupa, sex, data_mm3, data_vol, data_thick, data_left_right_overall, data_curv], axis=1,
                      join_axes=[data_mm3.index])
     data_basic = pd.concat([grupa, sex, data_mm3], axis=1, join_axes=[data_mm3.index])
-    return data#data
+    return data  # data
 
 
 def boxplot_features(data):
@@ -105,7 +106,7 @@ def get_t_test_results(data_shuffled0, smoker, nsmoker):
     t_stats = []
     p_value = []
     starting_idx = 3
-    for i in list(data_shuffled0)[starting_idx:]:      # FIXME: it was 250 on the right bound
+    for i in list(data_shuffled0)[starting_idx:]:  # FIXME: it was 250 on the right bound
         test = ttest_ind(smoker[i], nsmoker[i])
         t_stats.append(test[0])
         p_value.append(test[1])
@@ -116,12 +117,14 @@ def get_t_test_results(data_shuffled0, smoker, nsmoker):
     return t_test
 
 
-def feature_selector_simple(X0, y0, test_method, classifier_method, test_size=0.2, num_iters=1000, len_plot=None, X_val=None, y_val=None):
+def feature_selector_simple(X0, y0, test_method, classifier_method, test_size=0.2, num_iters=1000, len_plot=None,
+                            X_val=None, y_val=None):
     """Simpler API. Without using validation set. Useful for plotting. Function that will plot how adding next features influence classifier score
     :param test_method: given order of features
     :param classifier_method: classifier"""
 
-    len_plot = len(test_method) if len_plot is None else len_plot       # how many features to take into accountin the plot&calculations
+    len_plot = len(
+        test_method) if len_plot is None else len_plot  # how many features to take into accountin the plot&calculations
 
     scores_big_array = np.zeros((num_iters, len_plot))
     for n_iters in range(0, num_iters):
@@ -133,7 +136,7 @@ def feature_selector_simple(X0, y0, test_method, classifier_method, test_size=0.
         y_train = y0
         y_test = y_val
 
-        print(n_iters)#, i)
+        print(n_iters)  # , i)
         for i in range(1, len_plot):
             classifier_method.fit(X_train[test_method[0:i]['variable']], y_train)
             score = classifier_method.score(X_test[test_method[0:i]['variable']], y_test)
@@ -142,14 +145,14 @@ def feature_selector_simple(X0, y0, test_method, classifier_method, test_size=0.
             predict_test = classifier_method.predict(X_test[test_method[0:i]['variable']])
             predict_train = classifier_method.predict(X_train[test_method[0:i]['variable']])
             score_train = classifier_method.score(X_train[test_method[0:i]['variable']], y_train)
-    #scores_big_array_np = np.array(scores_big_array)
+    # scores_big_array_np = np.array(scores_big_array)
 
     # plot mean values
     plt.plot(range(1, len_plot), scores_big_array.mean(axis=0)[1:], color="black")
     plt.title("Accuracy of classifier with feature selection")
     plt.xlabel("Number Of variables")
     plt.ylabel("Accuracy Score")
-    #plt.show()
+    # plt.show()
     print("Mean accuracy values for different number of features ={}".format(scores_big_array.mean(axis=0)))
     return scores_big_array
 
@@ -347,16 +350,32 @@ def explore_selection_methods(X, X_val, y, y_val):
     return
 
 
-def run_classification(X, X_val, y, y_val, classifier, feature_selector_list, k=5, max_feature_number=30):
+def run_classification(X, X_val, y, y_val, classifier, feature_selector_list, k=5, max_feature_number=30, fast=0):
     # apply feature selection criteria with specified number of features
     # grid search for best model meta parameters for the classifier
     # FIXME: For fast run commented out grid search parameter packs
-    param_rf = {'n_estimators': [50, 100, 150, 200, 250, 500, 1000], 'max_depth': [3,4,5, 6,7,8, 9,10,11, 12,15], 'criterion': ['gini', 'entropy'],
-                'class_weight': ['balanced']}
-    param_svm = {'kernel': ['rbf', 'poly', 'linear', 'sigmoid'], 'cache_size': [1000], 'C': [0.5, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.5, 2.0, 5, 10],
+    param_rf = {'n_estimators': [20, 30, 40, 50, 75, 100, 150, 200, 250, 500, 1000],
+                'max_depth': [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 25, 40, 60, 100, 150],
+                'criterion': ['gini', 'entropy'],
+                'class_weight': ['balanced', 'balanced_subsample'],
+                'max_features': ['auto', 'log', 5, 15, 40],
+                'bootstrap': [True, False]}
+    param_svm = {'kernel': ['rbf', 'poly', 'linear', 'sigmoid'],
+                 'degree ': [2, 3, 4, 5, 6, 7],     # for poly only
+                 'coef0': [0.0, 0.01, 0.1, 0.5, 1.0, 2.0, 5.0],
+                 'shrinking': [True, False],
+                 'cache_size': [100, 200, 400, 650, 1000, 2000],
+                 'C': [0.5, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.5, 2.0, 5, 10],
                  'gamma': [0.03, 0.01, 0.005, 0.05, 0.01, 'auto']}
-    param_lr = {'C': [0.4, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.8, 3, 6, 10, 15], 'fit_intercept': [True, False]}
+    param_lr = {'C': [0.4, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.8, 3, 6, 10, 15],
+                'fit_intercept': [True, False],
+                'solver': ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga']}
 
+    if fast:
+        # just checks if the function works correctly and returns simple classifier
+        param_rf = {'n_estimators': [20]}
+        param_svm = {'kernel': ['rbf']}
+        param_lr = {'C': [0.8]}
 
     if isinstance(classifier, RandomForestClassifier):
         clf = GridSearchCV(classifier, param_rf, cv=k)
@@ -371,10 +390,10 @@ def run_classification(X, X_val, y, y_val, classifier, feature_selector_list, k=
 
     print(clf_grid.best_params_)
     # run model classification
-    #avg_acc, avg_roc, average_precision = run_k_fold(clf_grid, X, y, k)
+    # avg_acc, avg_roc, average_precision = run_k_fold(clf_grid, X, y, k)
 
     # calculate validation accuracy (accuracy of trained model on the data initially left out)
-    #val_acc = clf_grid.score(X_val, y_val)
+    # val_acc = clf_grid.score(X_val, y_val)
     # return average accuracy on test sets, average auc score on test sets, and validation score
     return val_acc, clf_grid  # avg_roc, val_acc
     # print (avg_acc, avg_roc, val_acc)
@@ -389,14 +408,13 @@ def build_results_comparison(fs_list, data_norm):
     clasf = [random_forest, svmc, lr]
 
     # Validation set ratio
-    val_set = [0.2]#[0.1, 0.2, 0.25]
+    val_set = [0.2]  # [0.1, 0.2, 0.25]
 
     # # number of features
     # feat_nr = [5, 10, 15, 20]
     #
     # # k-fold
     # k_fold = [3, 5, 10]
-
 
     # run through all combinations in a loop (feature selection + classifier)
     # features set at 20, k fold at 10
@@ -408,22 +426,24 @@ def build_results_comparison(fs_list, data_norm):
         for j, f in enumerate(fs_list):
             for k, v in enumerate(val_set):
                 print(i, c, j, f, k, v)
-                arr_acc[i, j, k], arr_prec[i, j, k], clf = run_classification(data_norm, c, f, k=10, val_ratio=v, nr_of_feat=20)
+                arr_acc[i, j, k], arr_prec[i, j, k], clf = run_classification(data_norm, c, f, k=10, val_ratio=v,
+                                                                              nr_of_feat=20)
                 list_clf.append(clf)
     arr_clf = np.asarray(list_clf).reshape((len(clasf), len(fs_list), len(val_set)))
     return arr_acc, arr_prec, arr_clf
 
 
-def grid_search_with_feature_selectors(X, X_val, y, y_val, feature_selectors_list):
+def grid_search_with_feature_selectors(X, X_val, y, y_val, feature_selectors_list, name):
     """
     Only grid search here
     returns parameters of the best classifiers with respect to a given feature selector
     """
     clasf_list = [RandomForestClassifier(), LogisticRegression(), svm.SVC()]
     best_clfs = []
-    text_file = open("Output_log.txt", "w")
+    text_file = open("Output_log" + name + ".txt", "w")
     for i, c in enumerate(clasf_list):
-        val_acc, clf = run_classification(X, X_val, y, y_val, c, feature_selectors_list[2], k=5, max_feature_number=30)
+        val_acc, clf = run_classification(X, X_val, y, y_val, c, feature_selectors_list, k=5, max_feature_number=30,
+                                          fast=0)
         print(val_acc, clf.best_params_)
         print(f"val_acc: {val_acc}\n clf.best_params_: {clf.best_params_}\n string: {c.__str__()} \n\n", file=text_file)
 
@@ -432,7 +452,7 @@ def grid_search_with_feature_selectors(X, X_val, y, y_val, feature_selectors_lis
     return best_clfs
 
 
-def iterate_and_plot(fs_list, best_clfs):
+def iterate_and_plot(X, X_val, y, y_val, fs_list, best_clfs, name):
     """
     Repeat experiments multiple times and plot graphs that show dependency of the result on the number of features
     and classifier - feature selector pair
@@ -450,32 +470,31 @@ def iterate_and_plot(fs_list, best_clfs):
     # classifiers = [arr_clf_flatten[i].best_estimators_ for i in arr_clf_flatten]
     clf_list = []
     description = []
-    num_iters = 200
+    num_iters = 100
     fig = plt.figure(figsize=(10, 8))
-    plt.xlabel('#features', fontsize=15)
-    plt.ylabel('Accuracy', fontsize=15)
-    plt.title('Plot of different models and feature selectors', fontsize=20)
+
     linestyles = ['-', ':', '--', '-.']  # linestyle for fs
-    model_colors_dict = ['k', 'r', 'g']
-    len_plot = 100
+    model_colors_dict = ['r', 'y', 'g']
+    len_plot = 150
     plot_starting_index = 1
     print('big loop started!')
-    for j, f in enumerate(fs_list):
-        for i, c in enumerate(clasf):
-            tmp_res = feature_selector_simple(X, y, f, c, test_size=0.2, num_iters=num_iters, X_val=X_val, y_val=y_val,
-                                              len_plot=len_plot)
-            clf_list.append(tmp_res)
-            description.append({'fs': f, 'c': c})
-            plt.plot(tmp_res.mean(axis=0), label=clasf_names[i] + ', ' + fs_names[j], color=model_colors_dict[i],
-                     linestyle=linestyles[j])
+    # for j, f in enumerate(fs_list):
+    for i, c in enumerate(clasf):
+        tmp_res = feature_selector_simple(X, y, fs_list, c, test_size=0.2, num_iters=num_iters, X_val=X_val,
+                                          y_val=y_val,
+                                          len_plot=len_plot)
+        plt.xlabel('#features', fontsize=15)
+        plt.ylabel('Accuracy', fontsize=15)
+        plt.title('Plot of different models for feature selector: ' + name, fontsize=14)
+        clf_list.append(tmp_res)
+        # description.append({'fs': f, 'c': c})
+        plt.plot(tmp_res.mean(axis=0), label=clasf_names[i], color=model_colors_dict[i])
 
-            print(clasf_names[i], fs_names[j], 'finished')
+        print(clasf_names[i], name, 'finished')
     plt.ylim(0.5, 0.8)
     plt.xlim(1, len_plot)
     legend = fig.legend(loc='upper right', shadow=True, fontsize='large')
-    fig.savefig('img_comparison_long.png')
+    fig.savefig('img_comparison_' + name + '.png')
 
     acc_with_features = np.asarray(clf_list).mean(axis=1)
-    np.save('clf_list.npy', clf_list)
-
-
+    np.save('clf_list_' + name + '.npy', clf_list)

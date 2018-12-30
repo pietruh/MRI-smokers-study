@@ -1,9 +1,6 @@
 """Main script for processing and classifying smoker data"""
 import pandas as pd
 import numpy as np
-import matplotlib
-import numpy as np
-import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from scipy.stats import ttest_ind
@@ -28,6 +25,12 @@ from sklearn.model_selection import LeaveOneOut
 from sklearn.utils import shuffle
 import os
 
+from sys import platform as sys_pf
+if sys_pf == 'darwin':
+    import matplotlib
+    matplotlib.use("TkAgg")  # TkAgg")Qt4Agg
+    import matplotlib.pyplot as plt
+
 
 # %matplotlib inline
 df_path = '../data/fully_merged_data.xlsx'
@@ -50,7 +53,7 @@ data = preprocess_statistics(all_stats, df, remove_strange=0)
 
 
 # Normalizing volume as a proportion to total volume for each sex
-data_norm = normalize_data_sex(data)
+data_norm = normalize_data_sex(data, norm_type='standard')
 
 data_shuffled0 = shuffle(data_norm, random_state=7)
 data_shuffled0 = data_shuffled0.reset_index(drop=True)

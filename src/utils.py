@@ -5,7 +5,11 @@ import pandas as pd
 import numpy as np
 from sklearn import preprocessing
 from scipy.stats import ttest_ind
-import matplotlib.pyplot as plt
+from sys import platform as sys_pf
+if sys_pf == 'darwin':
+    import matplotlib
+    matplotlib.use("TkAgg")  # TkAgg")Qt4Agg
+    import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split, LeaveOneOut, KFold, GridSearchCV
 from sklearn.decomposition import PCA, KernelPCA
 
@@ -36,6 +40,9 @@ def preprocess_statistics(all_stats, data, remove_strange=0):
     # data = df[list(df.columns[0:1]) + list(df.columns[40:])]
     drop_id = [130, 361, 379, 382, 455, 508, 517, 566, 643, 801, 834, 854, 927, 513] + remove_strange * strange_id
     # print(f'Dropping smokers with ids {drop_id}')
+    ret = data.id.isin(drop_id)
+    drop_indexes = ret.nonzero()[0]
+    data = data.drop(drop_indexes)
     # data = data[~data.id.isin(drop_id)]
 
     data = data.replace({'grupa': {'smoker': 1, 'non-smoker': 0}})
@@ -83,7 +90,7 @@ def normalize_volume_as_proportion(data):
     return
 
 
-def normalize_data_sex(data):
+def normalize_data_sex(data, norm_type='min_max'):
     """Normalizing volume based on sex"""
     ## Divide on two dataframes
     data_woman = data.loc[data['sex'] == "k"]
@@ -91,12 +98,15 @@ def normalize_data_sex(data):
     data_man = data.loc[data['sex'] == "m"]
     data_man = data_man.drop("sex", axis=1)
 
-    min_max_scaler = preprocessing.MinMaxScaler()
+    if norm_type == 'min_max':
+        scaler = preprocessing.MinMaxScaler()
+    elif norm_type == 'standard':
+        scaler = preprocessing.StandardScaler()
     # Normalizing volume as a proportion to total volume
 
     # Normalization column-wise
-    data_man_norm = pd.DataFrame(min_max_scaler.fit_transform(data_man), columns=data_man.columns)
-    data_woman_norm = pd.DataFrame(min_max_scaler.fit_transform(data_woman), columns=data_woman.columns)
+    data_man_norm = pd.DataFrame(scaler.fit_transform(data_man), columns=data_man.columns)
+    data_woman_norm = pd.DataFrame(scaler.fit_transform(data_woman), columns=data_woman.columns)
     data_norm = pd.concat([data_man_norm, data_woman_norm], axis=0, ignore_index=True)
 
     return data_norm
@@ -358,7 +368,7 @@ def run_classification(X, X_val, y, y_val, classifier, feature_selector_list, k=
                 'max_depth': [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 25, 40, 60, 100, 150],
                 'criterion': ['gini', 'entropy'],
                 'class_weight': ['balanced', 'balanced_subsample'],
-                'max_features': ['auto', 'log', 5, 15, 40],
+                'max_features': ['auto', 'log2', 'sqrt'],
                 'bootstrap': [True, False]}
     param_svm = {'kernel': ['rbf', 'poly', 'linear', 'sigmoid'],
                  'degree ': [2, 3, 4, 5, 6, 7],     # for poly only
@@ -443,7 +453,7 @@ def grid_search_with_feature_selectors(X, X_val, y, y_val, feature_selectors_lis
     text_file = open("Output_log" + name + ".txt", "w")
     for i, c in enumerate(clasf_list):
         val_acc, clf = run_classification(X, X_val, y, y_val, c, feature_selectors_list, k=5, max_feature_number=30,
-                                          fast=0)
+                                          fast=0)   # FIXME: this should only be 1 when debugging
         print(val_acc, clf.best_params_)
         print(f"val_acc: {val_acc}\n clf.best_params_: {clf.best_params_}\n string: {c.__str__()} \n\n", file=text_file)
 
@@ -470,12 +480,12 @@ def iterate_and_plot(X, X_val, y, y_val, fs_list, best_clfs, name):
     # classifiers = [arr_clf_flatten[i].best_estimators_ for i in arr_clf_flatten]
     clf_list = []
     description = []
-    num_iters = 100
+    num_iters = 100   #100
     fig = plt.figure(figsize=(10, 8))
 
     linestyles = ['-', ':', '--', '-.']  # linestyle for fs
     model_colors_dict = ['r', 'y', 'g']
-    len_plot = 150
+    len_plot = 75  #75
     plot_starting_index = 1
     print('big loop started!')
     # for j, f in enumerate(fs_list):
